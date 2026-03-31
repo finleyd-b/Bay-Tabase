@@ -5,7 +5,7 @@
 #
 #    https://shiny.posit.co/
 #
-  
+
 # Load packages
 library(shiny)
 library(dplyr)
@@ -17,18 +17,24 @@ library(shinyWidgets)
 library(leaflet)
 
 # Load and rename the CSV files
-#Not sure why the X has to be here. I'm pretty sure a file name isn't supposed to start with numbers?
+# File names can't start with numbers, so we write "X..."
 data1 <- read_csv("Data/1969_2015SanFranciscoBayWaterQualityData.csv")
 data2 <- read_csv("Data/2016_2021SanFranciscoBayWaterQualityData.csv")
 stations_data <- read_csv("Data/CurrentStationData.csv")
-phytoplankton1 <- read_csv("Data/Phytoplankton_San_Francisco_Bay_1992_2014.csv")
-phytoplankton2 <- read_csv("Data/Phytoplankton_San_Francisco_Bay_2014_2016.csv")
-phytoplankton3 <- read_csv("Data/Phytoplankton_San_Francisco_Bay_2017_2018.csv")
+phytoplankton1 <- read_csv("Data/Phytoplankton_San_Francisco_Bay_1992_2014.csv", locale = locale(encoding = "latin1"))
+phytoplankton2 <- read_csv("Data/Phytoplankton_San_Francisco_Bay_2014_2016.csv",  locale = locale(encoding = "latin1"))
+phytoplankton3 <- read_csv("Data/Phytoplankton_San_Francisco_Bay_2017_2018.csv",  locale = locale(encoding = "latin1"))
 
-# Combine the two general data files and three phytoplankton data files and view the new data sets
+# Combine the two general data files and three phytoplankton data files
 combined_data <- bind_rows(data1, data2)
 combined_phytoplankton_data <- bind_rows(phytoplankton1, phytoplankton2, phytoplankton3)
 
+# Cleaning
+combined_phytoplankton_data <- combined_phytoplankton_data |>
+  mutate(
+    Date = mdy(Date),
+    year = year(Date)
+  )
 
 # Define the variable labels
 variable_labels <- c(
@@ -38,10 +44,10 @@ variable_labels <- c(
   Oxygen = "Oxygen (mg/L)"
 )
 
-# Reformat the date column to mm/dd/yyyy
+# Reformat the combined_data date column to mm/dd/yyyy
 combined_data$Date <- mdy(combined_data$Date)
 
-# Remove variable columns that we're not using in our app
+# Remove variable columns that I'm not using
 combined_data <- combined_data |>
   select(-"Calculated_Oxygen", -"Oxygen_Percent_Saturation", -"Julian_Date")
 
@@ -62,7 +68,7 @@ cbPalette <- c(
   purple = "#CC79A7"
 )
 
-# Define pretty names for variables
+# Define nicer names for variables
 var_choices <- c(
   "Temperature (°C)" = "Temperature",
   "Salinity (PSU)" = "Salinity",
@@ -125,7 +131,7 @@ ui <- fluidPage(
   "))
   ),
   
-#-------------------------------------------------------------------------------
+  #-------------------------------------------------------------------------------
   
   tabsetPanel(
     tabPanel("Helpful Information",
@@ -147,11 +153,13 @@ ui <- fluidPage(
                p(strong("Long-Term Trends:"), " Examine how key water quality variables have changed over time across the bay.", style = "font-size:16px"),
                p(strong("Depth Profiles:"), " Explore how variables such as temperature, salinity, or oxygen vary with depth at a selected station and year.", style = "font-size:16px"),
                p(strong("Exploratory Plots:"), " Investigate relationships between different water quality variables.", style = "font-size:16px"),
+               p(strong("Phytoplankton Plots:"), " Explore phytoplankton community composition and abundance trends over time by taxa.", style = "font-size:16px"),
                
                strong("Data Notes:", style = "font-size:22px; margin-top:20px; display:block; text-decoration:underline;"),
                p("Not all stations were sampled during every year, and some measurements may be missing due to weather conditions, equipment issues, or quality control procedures. As a result, some plots may contain gaps or fewer observations for certain stations or time periods.", style = "font-size:16px"),
                
                strong("Understanding the Data:", style = "font-size:22px; margin-top:20px; display:block; text-decoration:underline;"),
+               p("Use this glossary as a reference tool if you have any questions pertaining a certain variable!", style = "font-size:16px"),
                p(strong("Temperature (°C):"), " Water temperature measured in degrees Celsius.", style = "font-size:16px"),
                p(strong("Salinity (PSU):"), " The salt concentration of water measured in practical salinity units.", style = "font-size:16px"),
                p(strong("Depth (m):"), " Depth below the water surface measured in meters.", style = "font-size:16px"),
@@ -167,6 +175,13 @@ ui <- fluidPage(
                p(strong("NH4 (µM):"), " Ammonium concentration in micromoles per liter.", style = "font-size:16px"),
                p(strong("PO4 (µM):"), " Phosphate concentration in micromoles per liter.", style = "font-size:16px"),
                p(strong("Si (µM):"), " Silicate concentration in micromoles per liter.", style = "font-size:16px"),
+               p(strong("Taxonomic Identification:"), " The scientific name or group assigned to the observed phytoplankton organism.", style = "font-size:16px"),
+               p(strong("Phylum or Class:"), " The broader taxonomic grouping (phylum or class) to which the identified organism belongs.", style = "font-size:16px"),
+               p(strong("Station Number:"), " The numeric identifier of the monitoring station where the phytoplankton sample was collected.", style = "font-size:16px"),
+               p(strong("Density (cells/mL):"), " The number of phytoplankton cells per milliliter of water, indicating organism abundance.", style = "font-size:16px"),
+               p(strong("Biovolume (cubic micrometers/mL):"), " The total volume of phytoplankton cells per milliliter, used as a proxy for biomass.", style = "font-size:16px"),
+               p(strong("Cell Volume (cubic micrometers/cell):"), " The average volume of a single phytoplankton cell, reflecting cell size.", style = "font-size:16px"),
+               p(strong("Actual Count:"), " The raw number of phytoplankton cells counted in the laboratory sample before density calculations.", style = "font-size:16px"),
                
                #Adding photos
                div(
@@ -185,6 +200,11 @@ ui <- fluidPage(
                  style = "color: #495057"
                ),
                mainPanel(
+                 # Blurb now sits to the right of the sidebar, at the top of the main panel
+                 p("Explore the locations of long-term water quality monitoring stations throughout San Francisco Bay.
+                   Click on any station marker to view the full dataset collected at that location, including measurements
+                   of temperature, salinity, oxygen, nutrients, and more.",
+                   style = "margin-top:10px; margin-bottom:10px;"),
                  leafletOutput("stationMap", height = "600px"),
                  width = 9
                )
@@ -254,13 +274,54 @@ ui <- fluidPage(
                  plotOutput("scatterPlot", height = "700px")
                )
              )
-    )
-  ),
+    ),
+    
     tabPanel("Phytoplankton Plots",
-             p("This is a page specifically for the phyoplankton data")
-           )
+             
+             sidebarLayout(
+               sidebarPanel(
+                 width = 3,
+                 style = "color: #495057",
+                 # Multi-selection drop-down for species
+                 pickerInput(
+                   inputId = "taxaInput",
+                   label = "Select Taxa:",
+                   choices = sort(unique(combined_phytoplankton_data$`Taxonomic Identification`)),
+                   selected = sort(unique(combined_phytoplankton_data$`Taxonomic Identification`))[1],
+                   multiple = TRUE,
+                   options = list(`actions-box` = TRUE)
+                 ),
+                 # Year range slider
+                 sliderInput(
+                   inputId = "yearRange",
+                   label = "Select Year Range:",
+                   min = min(lubridate::year(combined_phytoplankton_data$Date), na.rm = TRUE),
+                   max = max(lubridate::year(combined_phytoplankton_data$Date), na.rm = TRUE),
+                   value = c(min(lubridate::year(combined_phytoplankton_data$Date), na.rm = TRUE),
+                             max(lubridate::year(combined_phytoplankton_data$Date), na.rm = TRUE)),
+                   step = 1,
+                   sep = ""
+                 )
+               ),
+               
+               mainPanel(
+                 p("Explore patterns in phytoplankton communities over time.
+                   Use the selector to choose one or more taxa and a year range to compare
+                   abundance trends and average density across groups.",
+                   style = "margin-top:10px; margin-bottom:15px;"),
+                 tabsetPanel(
+                   tabPanel("Time Series",
+                            plotlyOutput("phytoTimeSeries", height = "600px")
+                   ),
+                   tabPanel("Summary Stats",
+                            plotlyOutput("phytoSummary", height = "600px")
+                   )
+                 )
+               )
+             )
+    )
+  )
 )
-
 #-------------------------------------------------------------------------------
 
 server <- function(input, output, session) {
@@ -304,7 +365,7 @@ server <- function(input, output, session) {
     
     combined_data |>
       filter(Station_Number == as.numeric(selected_station())) |>
-      select(-DiscreteChlorophyll_Pheopigment_Ratio) |>      # Remove this column here
+      select(-DiscreteChlorophyll_Pheopigment_Ratio) |>      # Remove this column
       mutate(Date = format(Date, "%m/%d/%Y")) |>              # Format Date
       select(Date, everything()) |>                            # Put Date first
       datatable(options = list(pageLength = 10), rownames = FALSE)
@@ -440,6 +501,57 @@ server <- function(input, output, session) {
         plot.title = element_text(size = 20, face = "bold"),
         axis.title = element_text(size = 18),
         axis.text = element_text(size = 14)
+      )
+  })
+  
+  # Phytoplankton Plots
+  # Reactive filtered data based on user input
+  filtered_phyto <- reactive({
+    req(input$taxaInput, input$yearRange)
+    
+    combined_phytoplankton_data |>
+      mutate(year = lubridate::year(Date)) |>
+      filter(
+        `Taxonomic Identification` %in% input$taxaInput,
+        year >= input$yearRange[1],
+        year <= input$yearRange[2]
+      )
+  })
+  
+  # Time Series Plot
+  output$phytoTimeSeries <- renderPlotly({
+    df <- filtered_phyto() |>
+      group_by(year, `Taxonomic Identification`) |>
+      summarise(`Density (cells/mL)` = mean(`Density (cells/mL)`, na.rm = TRUE))
+    
+    plot_ly(df, x = ~year, y = ~`Density (cells/mL)`, color = ~`Taxonomic Identification`,
+            type = 'scatter', mode = 'lines+markers') |>
+      layout(title = "Phytoplankton Abundance Over Time",
+             xaxis = list(title = "Year"),
+             yaxis = list(title = "Average Abundance (cells/mL)"))
+  })
+  
+  # Summary Stats Plot
+  output$phytoSummary <- renderPlotly({
+    df <- filtered_phyto() |>
+      group_by(`Taxonomic Identification`, year) |>
+      summarise(mean_density = mean(`Density (cells/mL)`, na.rm = TRUE), .groups = "drop")
+    
+    plot_ly(df,
+            x = ~`Taxonomic Identification`,
+            y = ~year,
+            z = ~mean_density,
+            type = "scatter3d",
+            mode = "markers",
+            marker = list(size = 5),
+            color = ~`Taxonomic Identification`) |>
+      layout(
+        title = "Average Abundance by Taxa and Year",
+        scene = list(
+          xaxis = list(title = "Taxa"),
+          yaxis = list(title = "Year"),
+          zaxis = list(title = "Mean Abundance (cells/mL)")
+        )
       )
   })
 }
